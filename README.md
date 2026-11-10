@@ -102,9 +102,10 @@ npm test          # unit tests (Vitest + jsdom)
 npm run test:e2e  # browser tests (Playwright, real Chromium)
 ```
 
-`npm test` covers the drill engine: buffer matching and normalisation, the line diff, record and
-personal-best logic (including independent time/key bests and corrupt-storage recovery),
-`localStorage` round-tripping, and drill-session behaviour. `npm run test:e2e` builds the site,
+`npm test` covers the drill engine: buffer matching and normalisation, the line diff, the
+stopwatch (start-on-first-key, freeze-on-solve, injected clock), record and personal-best logic
+(including independent time/key bests and corrupt-storage recovery), `localStorage` round-tripping,
+and drill-session behaviour. `npm run test:e2e` builds the site,
 serves it, and then **replays every drill's reference solution in a real browser** against the
 same editor and emulator the app ships. That is the test that keeps the curriculum honest. It
 also covers timing, records, retry, persistence across reloads, and navigation.

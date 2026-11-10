@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createDrillSession, type DrillSession } from '../engine/session';
+import { createStopwatch } from '../engine/stopwatch';
 import { diffBuffers } from '../engine/text';
 import { formatDuration } from '../engine/format';
 import type { Drill, Lesson } from '../engine/types';
@@ -31,7 +32,7 @@ export function DrillView({
   onOverview,
 }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null);
-  const startedAtRef = useRef<number | null>(null);
+  const watchRef = useRef(createStopwatch());
   const keyCountRef = useRef(0);
   const [state, setState] = useState({ keys: 0, elapsed: 0 });
   const [result, setResult] = useState<{
@@ -60,7 +61,7 @@ export function DrillView({
     setMode('normal');
     setSnapshot(drill.buffer);
     keyCountRef.current = 0;
-    startedAtRef.current = null;
+    watchRef.current.reset();
     setState({ keys: 0, elapsed: 0 });
 
     const session: DrillSession = createDrillSession(host, {
@@ -69,8 +70,7 @@ export function DrillView({
       cursorTarget: drill.cursor,
       cursorStart: drill.cursorStart,
       onSolved: () => {
-        const start = startedAtRef.current ?? performance.now();
-        const timeMs = Math.max(0, performance.now() - start);
+        const timeMs = watchRef.current.stop();
         const usedKeys = keyCountRef.current;
         setSnapshot(session.text());
         const outcome = submitRef.current({ timeMs, keys: usedKeys });
@@ -93,14 +93,16 @@ export function DrillView({
 
     const onKey = (event: KeyboardEvent) => {
       if (MODIFIERS.has(event.key)) return;
+      const watch = watchRef.current;
+      if (!watch.started) watch.start();
       keyCountRef.current += 1;
-      if (startedAtRef.current === null) startedAtRef.current = performance.now();
       setState((s) => ({ ...s, keys: keyCountRef.current }));
     };
     // 10 fps is plenty for a clock and keeps React out of the keystroke path.
     const timer = window.setInterval(() => {
-      if (startedAtRef.current === null) return;
-      const elapsed = performance.now() - startedAtRef.current;
+      const watch = watchRef.current;
+      if (!watch.started || watch.stopped) return;
+      const elapsed = watch.elapsed();
       setState((s) => (s.elapsed === elapsed ? s : { ...s, elapsed }));
     }, 100);
 
