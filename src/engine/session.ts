@@ -1,7 +1,6 @@
 import { EditorSelection, EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { history } from '@codemirror/commands';
-import { html } from '@codemirror/lang-html';
 import { getCM, vim } from '@replit/codemirror-vim';
 import { buffersMatch, type CursorPosition } from './text';
 
@@ -11,6 +10,12 @@ export interface DrillSessionOptions {
   cursorTarget?: CursorPosition;
   /** Where the cursor should start. Defaults to the start of the buffer. */
   cursorStart?: CursorPosition;
+  /**
+   * Whether the drill is allowed to complete. Checked every time the buffer or
+   * cursor reaches the goal, so a state that is reached without the learner
+   * doing anything (clicking the target line, for instance) does not count.
+   */
+  canSolve?: () => boolean;
   /** Called once, the moment the drill reaches its goal. */
   onSolved?: () => void;
 }
@@ -35,8 +40,6 @@ export interface DrillSession {
  *  - `allowMultipleSelections` is required for Ctrl-v. The adapter models a
  *    blockwise selection as several selection ranges; without the facet
  *    CodeMirror keeps only the first one and block edits silently do nothing.
- *  - `html()` makes `cit` / `dit` work. The adapter resolves tags through the
- *    syntax tree, not by scanning for angle brackets.
  *  - `history()` gives Vim's undo its backing store.
  *  - No `defaultKeymap`: it binds Ctrl-a to `cursorLineStart`, which swallows
  *    Vim's Ctrl-a increment. Vim supplies its own normal/insert bindings.
@@ -48,7 +51,6 @@ export function drillExtensions() {
   return [
     EditorState.allowMultipleSelections.of(true),
     EditorView.lineWrapping,
-    html(),
     history(),
     vim({ status: true }),
   ];
@@ -87,6 +89,7 @@ export function createDrillSession(
 
   const updateListener = EditorView.updateListener.of((update) => {
     if (solved) return;
+    if (options.canSolve && !options.canSolve()) return;
     if (isSolvedState(update.state, options.target, options.cursorTarget)) {
       solved = true;
       options.onSolved?.();
@@ -145,7 +148,8 @@ export function createDrillSession(
     },
   };
 
-  if (isSolvedState(view.state, options.target, options.cursorTarget)) {
+  const canSolve = !options.canSolve || options.canSolve();
+  if (canSolve && isSolvedState(view.state, options.target, options.cursorTarget)) {
     solved = true;
     options.onSolved?.();
   }

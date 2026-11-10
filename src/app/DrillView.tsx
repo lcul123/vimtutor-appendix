@@ -69,6 +69,7 @@ export function DrillView({
       target: drill.target,
       cursorTarget: drill.cursor,
       cursorStart: drill.cursorStart,
+      canSolve: () => keyCountRef.current > 0,
       onSolved: () => {
         const timeMs = watchRef.current.stop();
         const usedKeys = keyCountRef.current;
@@ -87,44 +88,67 @@ export function DrillView({
     // A new attempt remounts the editor, which is the simplest correct reset.
   }, [drill, attempt]);
 
+  // Register the key listener in the capture phase, before CodeMirror's own
+  // handlers run: an update that reaches the goal must already have been
+  // counted, otherwise a click-driven selection could complete the drill first.
   useEffect(() => {
     const host = hostRef.current;
     if (!host || finished) return;
 
     const onKey = (event: KeyboardEvent) => {
-      if (MODIFIERS.has(event.key)) return;
+      // Tab is handled below, and modifiers are not keystrokes on their own.
+      if (event.key === 'Tab' || MODIFIERS.has(event.key)) return;
       const watch = watchRef.current;
       if (!watch.started) watch.start();
       keyCountRef.current += 1;
       setState((s) => ({ ...s, keys: keyCountRef.current }));
     };
-    // 10 fps is plenty for a clock and keeps React out of the keystroke path.
+    // Vim leaves insert mode on Tab, which moves focus out of the editor. These
+    // drills never need a tab character, so swallow it to keep typing in place.
+    const onTab = (event: KeyboardEvent) => {
+      if (event.key !== 'Tab') return;
+      event.preventDefault();
+    };
+    host.addEventListener('keydown', onTab, true);
+    host.addEventListener('keydown', onKey, true);
+    return () => {
+      host.removeEventListener('keydown', onTab, true);
+      host.removeEventListener('keydown', onKey, true);
+    };
+  }, [drill.id, attempt, finished]);
+
+  // Poll the clock on a slow interval; it is only displayed, never scored.
+  useEffect(() => {
+    if (finished) return;
     const timer = window.setInterval(() => {
       const watch = watchRef.current;
       if (!watch.started || watch.stopped) return;
       const elapsed = watch.elapsed();
       setState((s) => (s.elapsed === elapsed ? s : { ...s, elapsed }));
     }, 100);
-
-    host.addEventListener('keydown', onKey, true);
-    return () => {
-      window.clearInterval(timer);
-      host.removeEventListener('keydown', onKey, true);
-    };
+    return () => window.clearInterval(timer);
   }, [drill.id, attempt, finished]);
 
   const retry = () => setAttempt((n) => n + 1);
 
+  // Capture on window and stop propagation: with a Vim prefix pending (`f`, `r`,
+  // `"`) the emulator would otherwise consume the chord as the prefix's
+  // argument, leaving the drill, timer and key count running.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (!(event.ctrlKey || event.metaKey) || event.key !== 'Enter') return;
       event.preventDefault();
+      event.stopPropagation();
       if (event.shiftKey) onNext();
       else retry();
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
   });
+
+  // Toolbar buttons must not take focus away from the buffer: the next thing a
+  // learner does is type, and a focused button silently swallows every key.
+  const keepFocus = (event: React.MouseEvent) => event.preventDefault();
 
   const diff = drill.target !== undefined ? diffBuffers(snapshot, drill.target) : null;
   const bestLabel = best ? `${formatDuration(best.bestTimeMs)} · ${best.bestKeys} keys` : 'none yet';
@@ -207,18 +231,23 @@ export function DrillView({
             <span>The timer starts on your first keystroke. Esc returns to normal mode.</span>
           )}
         </div>
-        <button className="btn btn--small" onClick={() => setShowHint((v) => !v)} aria-expanded={showHint}>
+        <button
+          className="btn btn--small"
+          onMouseDown={keepFocus}
+          onClick={() => setShowHint((v) => !v)}
+          aria-expanded={showHint}
+        >
           {showHint ? 'Hide hint' : 'Hint'}
         </button>
-        <button className="btn btn--small" onClick={retry}>
+        <button className="btn btn--small" onMouseDown={keepFocus} onClick={retry}>
           Retry
         </button>
         {drillNumber > 1 && (
-          <button className="btn btn--small btn--ghost" onClick={onPrev}>
+          <button className="btn btn--small btn--ghost" onMouseDown={keepFocus} onClick={onPrev}>
             Previous
           </button>
         )}
-        <button className="btn btn--small btn--primary" onClick={onNext}>
+        <button className="btn btn--small btn--primary" onMouseDown={keepFocus} onClick={onNext}>
           Next drill
         </button>
       </div>

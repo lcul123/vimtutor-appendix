@@ -195,4 +195,32 @@ describe('drill session', () => {
     // Buffer already matches, but the cursor is at 0, so it is not solved.
     expect(session.isSolved()).toBe(false);
   });
+
+  it('does not solve when canSolve says the learner has done nothing', () => {
+    let typed = false;
+    let solves = 0;
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const session = createDrillSession(host, {
+      buffer: 'abc',
+      cursorTarget: { line: 0, ch: 2 },
+      canSolve: () => typed,
+      onSolved: () => {
+        solves += 1;
+      },
+    });
+    mounted.push(session);
+
+    // Clicking into the target position is not a solve: no key was pressed.
+    session.view.dispatch({ selection: EditorSelection.cursor(2) });
+    expect(solves).toBe(0);
+    expect(session.isSolved()).toBe(false);
+
+    // Once the learner has typed, the same position does count.
+    typed = true;
+    session.view.dispatch({ selection: EditorSelection.cursor(0) });
+    session.view.dispatch({ selection: EditorSelection.cursor(2) });
+    expect(solves).toBe(1);
+    expect(session.isSolved()).toBe(true);
+  });
 });

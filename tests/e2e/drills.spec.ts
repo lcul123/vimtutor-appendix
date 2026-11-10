@@ -144,6 +144,77 @@ test.describe('solved state', () => {
     await page.keyboard.press('Control+Enter');
     await expect(page.getByTestId('solved')).toHaveCount(0);
   });
+
+  test('a mouse click cannot solve a cursor drill or set a best', async ({ page }) => {
+    await page.goto('/#/inline-jumps/3');
+    // Click straight onto the target character: no key was pressed, so the
+    // drill must stay unsolved and nothing may reach localStorage.
+    const point = await page.evaluate(() => {
+      const line = document.querySelector('.cm-content .cm-line')!;
+      const range = document.createRange();
+      range.setStart(line.firstChild!, 14);
+      range.setEnd(line.firstChild!, 15);
+      const rect = range.getBoundingClientRect();
+      return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+    });
+    await page.mouse.click(point.x, point.y);
+    await expect(page.getByTestId('editor').locator('.cm-editor')).toHaveClass(/cm-focused/);
+    await expect(page.getByTestId('solved')).toHaveCount(0);
+    await expect(page.getByTestId('hud-keys')).toHaveText('0');
+    expect(await page.evaluate(() => localStorage.getItem('vimtutor-appendix:records:v1'))).toBeNull();
+
+    // The same cursor position reached with a real key does count.
+    await focusEditor(page);
+    await play(page, ['f', '-', ';', ';']);
+    await expect(page.getByTestId('solved')).toBeVisible();
+  });
+
+  test('Ctrl+Enter retries even with a Vim prefix pending', async ({ page }) => {
+    await page.goto('/#/inline-jumps/0');
+    await focusEditor(page);
+    // `f` leaves Vim waiting for a character; the chord must not become that
+    // character, and the retry must clear the timer and the key count.
+    await play(page, ['f']);
+    await expect(page.getByTestId('hud-keys')).toHaveText('1');
+
+    await page.keyboard.press('Control+Enter');
+    await expect(page.getByTestId('hud-keys')).toHaveText('0');
+    await expect(page.getByTestId('hud-time')).toHaveText('0.00s');
+    await expect(page.getByTestId('editor').locator('.cm-content')).toContainText(
+      'const total = price + tax;',
+    );
+
+    // And the fresh attempt scores from zero.
+    await focusEditor(page);
+    await play(page, ['f', '+', 'r', '-']);
+    await expect(page.getByTestId('solved')).toBeVisible();
+    await expect(page.getByTestId('hud-keys')).toHaveText('4');
+  });
+
+  test('toolbar buttons leave focus in the editor', async ({ page }) => {
+    await page.goto('/#/inline-jumps/1');
+    await focusEditor(page);
+    await page.getByRole('button', { name: 'Hint' }).click();
+    await expect(page.locator('.hint-box')).toBeVisible();
+    // Typing straight after clicking Hint must reach the buffer.
+    await page.keyboard.press('f');
+    await page.keyboard.press(',');
+    await expect(page.getByTestId('hud-keys')).toHaveText('2');
+    await expect(page.getByTestId('editor').locator('.cm-editor')).toHaveClass(/cm-focused/);
+  });
+
+  test('Tab in insert mode does not throw focus out of the editor', async ({ page }) => {
+    await page.goto('/#/inline-jumps/0');
+    await focusEditor(page);
+    await page.keyboard.press('i');
+    await page.keyboard.press('Tab');
+    await expect(page.getByTestId('editor').locator('.cm-editor')).toHaveClass(/cm-focused/);
+    // The editor keeps receiving input, and nothing was inserted.
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('editor').locator('.cm-content')).toHaveText(
+      'const total = price + tax;',
+    );
+  });
 });
 
 test.describe('mode indicator', () => {
