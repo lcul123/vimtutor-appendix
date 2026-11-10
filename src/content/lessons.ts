@@ -155,7 +155,7 @@ export const lessons: Lesson[] = [
         buffer: 'drop drop drop keep',
         target: 'keep',
         par: 4,
-        hint: 'dw deletes the first word. 2. repeats that same delete twice more.',
+        hint: 'dw deletes the first word; a count before . repeats that delete that many times.',
         solution: ['d', 'w', '2', '.'],
       },
     ],
@@ -261,7 +261,7 @@ export const lessons: Lesson[] = [
       {
         id: 'sub-2',
         title: 'Every match on the line',
-        goal: 'Replace all four spaces on this line with a single dash between items.',
+        goal: 'Turn the spaces between these words into dashes.',
         buffer: 'red green blue gold',
         target: 'red-green-blue-gold',
         par: 9,
