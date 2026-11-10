@@ -116,6 +116,8 @@ The first e2e run needs browsers once:
 npx playwright install chromium
 ```
 
+CI runs both suites on every pull request (`.github/workflows/ci.yml`).
+
 ## Deploying to GitHub Pages
 
 A workflow is included at `.github/workflows/deploy.yml`; it runs the unit tests, builds, and
