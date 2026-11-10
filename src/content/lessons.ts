@@ -76,7 +76,7 @@ export const lessons: Lesson[] = [
     title: 'Text objects',
     summary:
       'Operators take a text object instead of a motion: c, d or y plus i (inside) or a (around). "Change inner word" works from anywhere inside the word, and ca( takes the brackets with it while ci( keeps them.',
-    commands: ['ciw', 'di"', 'ca(', 'yi{', 'dit'],
+    commands: ['ciw', 'di"', 'ca(', 'yi{'],
     drills: [
       {
         id: 'objects-1',

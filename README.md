@@ -35,7 +35,7 @@ rather than completeness, and each is a *skill* rather than a fact to memorise:
 | Lesson | Why it earns a slot |
 | --- | --- |
 | `f` `t` `F` `T` with `;` `,` | Reach an exact character in two keys instead of arrow-keying. |
-| Text objects (`ciw`, `di"`, `ca(`, `yi{`, `dit`) | Edit *by structure* so the edit is the same size regardless of the content. |
+| Text objects (`ciw`, `di"`, `ca(`, `yi{`) | Edit *by structure* so the edit is the same size regardless of the content. |
 | The dot command | Turns "make an edit" into "aim, then repeat" — the single biggest speed multiplier. |
 | `*` `#` `n` `N` and `cgn` | Jump to what you mean and rename every occurrence without a regex. |
 | `%` | One key to the other end of a bracket, across lines, and a motion for operators. |
@@ -52,7 +52,7 @@ memorisation-heavy or situational, and they would dilute the 80/20.
 ## Lesson list
 
 1. **Hit a character on the line** — `f` `t` `F` `T` `;` `,` (4 drills)
-2. **Text objects** — `ciw` `di"` `ca(` `yi{` `dit` (4)
+2. **Text objects** — `ciw` `di"` `ca(` `yi{` (4)
 3. **The dot command** — `.` (3)
 4. **Search without looking** — `*` `#` `n` `N` `cgn` (3)
 5. **Jump between brackets** — `%` `d%` (3)
@@ -143,8 +143,6 @@ but it is not Vim, and a few things needed working around. Each of these is docu
 - **Ctrl-v needs `EditorState.allowMultipleSelections`.** The adapter models a blockwise selection
   as several selection ranges. Without that facet CodeMirror silently keeps only the first range,
   so block `d`/`c`/`I`/`A` appear to do almost nothing. With it, all four block drills work.
-- **`cit`/`dit` need a syntax tree.** Tag objects resolve through the HTML parser, so the editor
-  enables `@codemirror/lang-html`; otherwise `dit` inside `<div>…</div>` is a no-op.
 - **Don't call `Vim.enterVimMode()` yourself.** The `vim()` extension already enters Vim mode.
   Calling it a second time breaks insert-change recording, so `.` and macros replay only the last
   character of an insert. Removing the duplicate call fixed it.
