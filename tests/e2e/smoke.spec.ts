@@ -1,10 +1,11 @@
 import { expect, test } from '@playwright/test';
+import { placedLessons } from '../../src/content/curriculum';
 
 test.describe('app smoke', () => {
   test('overview lists every lesson', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByRole('heading', { level: 1 })).toContainText('Vim');
-    await expect(page.locator('.lesson-card')).toHaveCount(10);
+    await expect(page.locator('.lesson-card')).toHaveCount(placedLessons().length);
   });
 
   test('a drill mounts a focused Vim editor', async ({ page }) => {
@@ -16,6 +17,6 @@ test.describe('app smoke', () => {
 
   test('unknown hash falls back to the overview', async ({ page }) => {
     await page.goto('/#/nope/3');
-    await expect(page.locator('.lesson-card')).toHaveCount(10);
+    await expect(page.locator('.lesson-card')).toHaveCount(placedLessons().length);
   });
 });
