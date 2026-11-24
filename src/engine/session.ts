@@ -1,8 +1,8 @@
 import { EditorSelection, EditorState } from '@codemirror/state';
-import { EditorView } from '@codemirror/view';
+import { EditorView, lineNumbers } from '@codemirror/view';
 import { history } from '@codemirror/commands';
-import { getCM, vim } from '@replit/codemirror-vim';
-import { buffersMatch, type CursorPosition } from './text';
+import { CodeMirror, getCM, vim } from '@replit/codemirror-vim';
+import { buffersMatch, normalizeBuffer, type CursorPosition } from './text';
 
 export interface DrillSessionOptions {
   buffer: string;
@@ -16,6 +16,18 @@ export interface DrillSessionOptions {
    * doing anything (clicking the target line, for instance) does not count.
    */
   canSolve?: () => boolean;
+  /**
+   * Buffer states that must be observed in order. While this list is unfinished
+   * the drill does not solve, even if `target` already matches an intermediate
+   * state (undo, then redo).
+   */
+  checkpoints?: string[];
+  /** Cursor positions that must be visited in order. */
+  cursorStops?: CursorPosition[];
+  /** Require :w before the drill can solve. */
+  requiresWrite?: boolean;
+  onWrite?: () => void;
+  onUpdate?: (snapshot: { text: string; cursor: CursorPosition }) => void;
   /** Called once, the moment the drill reaches its goal. */
   onSolved?: () => void;
 }
@@ -51,9 +63,39 @@ export function drillExtensions() {
   return [
     EditorState.allowMultipleSelections.of(true),
     EditorView.lineWrapping,
+    lineNumbers(),
     history(),
     vim({ status: true }),
   ];
+}
+
+/**
+ * :w calls `CodeMirror.commands.save`. One hook fans that out to the editor
+ * instance that ran the command, as a `vim-write` signal.
+ */
+let writeHooked = false;
+export function installVimWriteHook(): void {
+  if (writeHooked) return;
+  writeHooked = true;
+  CodeMirror.commands.save = (cm: { signal?: (type: string) => void }) => {
+    cm?.signal?.('vim-write');
+  };
+}
+
+installVimWriteHook();
+
+/** Place a slot immediately above Vim's command-line panel. */
+export function attachStatusSlot(host: HTMLElement): HTMLElement {
+  const slot = document.createElement('div');
+  slot.className = 'statusline-slot';
+  const panel = host.querySelector('.cm-vim-panel');
+  if (panel?.parentElement) {
+    panel.parentElement.insertBefore(slot, panel);
+    return slot;
+  }
+  const editor = host.querySelector('.cm-editor');
+  (editor ?? host).appendChild(slot);
+  return slot;
 }
 
 export function cursorOf(state: EditorState): CursorPosition {
@@ -86,14 +128,47 @@ export function createDrillSession(
   options: DrillSessionOptions,
 ): DrillSession {
   let solved = false;
+  let wrote = false;
+  let checkpointAt = 0;
+  let cursorStopAt = 0;
+  let lastNorm = normalizeBuffer(options.buffer);
 
-  const updateListener = EditorView.updateListener.of((update) => {
+  const progress = (state: EditorState) => {
+    if (options.checkpoints) {
+      const norm = normalizeBuffer(state.doc.toString());
+      const next = options.checkpoints[checkpointAt];
+      if (next !== undefined && norm !== lastNorm && normalizeBuffer(next) === norm) checkpointAt += 1;
+      lastNorm = norm;
+    }
+    if (options.cursorStops) {
+      const pos = cursorOf(state);
+      const next = options.cursorStops[cursorStopAt];
+      if (next && pos.line === next.line && pos.ch === next.ch) cursorStopAt += 1;
+    }
+  };
+
+  const ready = (state: EditorState) => {
+    if (options.checkpoints && checkpointAt < options.checkpoints.length) return false;
+    if (options.cursorStops && cursorStopAt < options.cursorStops.length) return false;
+    const hasBufferGoal = options.target !== undefined || options.cursorTarget !== undefined;
+    if (hasBufferGoal && !isSolvedState(state, options.target, options.cursorTarget)) return false;
+    if (options.requiresWrite && !wrote) return false;
+    return Boolean(options.checkpoints || options.cursorStops || hasBufferGoal || options.requiresWrite);
+  };
+
+  const consider = (state: EditorState) => {
+    options.onUpdate?.({ text: state.doc.toString(), cursor: cursorOf(state) });
     if (solved) return;
     if (options.canSolve && !options.canSolve()) return;
-    if (isSolvedState(update.state, options.target, options.cursorTarget)) {
-      solved = true;
-      options.onSolved?.();
-    }
+    progress(state);
+    if (!ready(state)) return;
+    solved = true;
+    options.onSolved?.();
+  };
+
+  const updateListener = EditorView.updateListener.of((update) => {
+    if (!update.docChanged && !update.selectionSet) return;
+    consider(update.state);
   });
 
   const view = new EditorView({
@@ -116,11 +191,21 @@ export function createDrillSession(
     for (const listener of modeListeners) listener(mode);
   };
   cm?.on?.('vim-mode-change', onModeChange);
+  const onWrite = () => {
+    wrote = true;
+    options.onWrite?.();
+    consider(view.state);
+  };
+  cm?.on?.('vim-write', onWrite);
 
   const session: DrillSession = {
     view,
     reset() {
       solved = false;
+      wrote = false;
+      checkpointAt = 0;
+      cursorStopAt = 0;
+      lastNorm = normalizeBuffer(options.buffer);
       view.dispatch({
         changes: { from: 0, to: view.state.doc.length, insert: options.buffer },
         selection: EditorSelection.cursor(offsetOf(view.state, options.cursorStart ?? { line: 0, ch: 0 })),
@@ -129,6 +214,7 @@ export function createDrillSession(
     },
     destroy() {
       cm?.off?.('vim-mode-change', onModeChange);
+      cm?.off?.('vim-write', onWrite);
       modeListeners.clear();
       view.destroy();
       parent.replaceChildren();
@@ -148,8 +234,7 @@ export function createDrillSession(
     },
   };
 
-  const canSolve = !options.canSolve || options.canSolve();
-  if (canSolve && isSolvedState(view.state, options.target, options.cursorTarget)) {
+  if (!solved && (!options.canSolve || options.canSolve()) && ready(view.state)) {
     solved = true;
     options.onSolved?.();
   }

@@ -6,11 +6,14 @@ import { formatDuration, formatKeys } from '../engine/format';
 interface Props {
   lessons: Lesson[];
   records: Records;
+  trialBest: number | null;
+  trialToday?: number;
   onOpen(lessonId: string, drillIndex: number): void;
+  onTrial(): void;
   onResetRecords(): void;
 }
 
-export function Overview({ lessons, records, onOpen, onResetRecords }: Props) {
+export function Overview({ lessons, records, trialBest, trialToday, onOpen, onTrial, onResetRecords }: Props) {
   const [openLesson, setOpenLesson] = useState<string | null>(lessons[0]?.id ?? null);
 
   const stats = useMemo(() => {
@@ -44,15 +47,14 @@ export function Overview({ lessons, records, onOpen, onResetRecords }: Props) {
     <div className="overview">
       <section className="hero">
         <div>
-          <h1>Vim, the part they leave out.</h1>
+          <h1>Vim, in the terminal you already use.</h1>
           <p>
-            vimtutor teaches you to move and edit. It barely touches the commands that save you the
-            most time every day: text objects, the dot command, substitutions, block edits and
-            macros. Ten lessons, thirty-seven short drills, one tiny Vim in your browser.
+            Start with the vimtutor core, then the commands it leaves out, then the VS Code layout
+            the Vim extension lives in: explorer, editor, and terminal, by keyboard only.
           </p>
           <p style={{ marginTop: 12, fontSize: 14, color: 'var(--ink-faint)' }}>
-            Learn by doing. Every drill is timed, every keystroke counted, and your bests are kept
-            on this device.
+            Every drill is timed. The daily trial is a fixed run of the important ones, kept on this
+            device.
           </p>
         </div>
         <aside className="hero__panel">
@@ -76,10 +78,21 @@ export function Overview({ lessons, records, onOpen, onResetRecords }: Props) {
               <span>Lessons</span>
               <span>{stats.lessons}</span>
             </div>
+            <div className="hero__row">
+              <span>Trial best</span>
+              <span>{trialBest === null ? '—' : formatDuration(trialBest)}</span>
+            </div>
+            <div className="hero__row">
+              <span>Trial today</span>
+              <span>{trialToday === undefined ? '—' : formatDuration(trialToday)}</span>
+            </div>
           </div>
           <div className="hero__actions">
             <button className="btn btn--primary" onClick={start}>
               {stats.done === 0 ? 'Start drilling' : nextUnfinished ? 'Continue' : 'Practise again'}
+            </button>
+            <button className="btn" onClick={onTrial}>
+              Daily trial
             </button>
             {stats.done > 0 && (
               <button className="btn btn--ghost btn--small" onClick={onResetRecords}>
@@ -96,11 +109,14 @@ export function Overview({ lessons, records, onOpen, onResetRecords }: Props) {
       </div>
 
       <div className="lesson-list">
-        {lessons.map((lesson) => {
+        {lessons.map((lesson, lessonIndex) => {
+          const previous = lessons[lessonIndex - 1];
+          const showSection = lesson.sectionTitle && lesson.sectionTitle !== previous?.sectionTitle;
           const solvedCount = lesson.drills.filter((d) => records[d.id]).length;
           const open = openLesson === lesson.id;
           return (
             <section key={lesson.id} className={`lesson-card${open ? ' lesson-card--open' : ''}`}>
+              {showSection && <p className="lesson-card__section">{lesson.sectionTitle}</p>}
               <button
                 className="lesson-card__head"
                 onClick={() => setOpenLesson(open ? null : lesson.id)}

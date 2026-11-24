@@ -1,6 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
-import { lessons } from '../../src/content/lessons';
+import { placedLessons } from '../../src/content/curriculum';
 import type { Drill } from '../../src/engine/types';
+
+const lessons = placedLessons();
 
 /**
  * Replays every lesson's reference solution against the real app in a real
@@ -20,10 +22,14 @@ const SPECIAL: Record<string, string> = {
 };
 
 async function focusEditor(page: Page) {
-  // Click the very start of the first line so the cursor stays where the drill
-  // expects it. Clicking the empty area past the end of a line moves the cursor.
-  await page.getByTestId('editor').locator('.cm-line').first().click({ position: { x: 2, y: 8 } });
-  await expect(page.getByTestId('editor').locator('.cm-editor')).toHaveClass(/cm-focused/);
+  const editor = page.getByTestId('editor').locator('.cm-editor');
+  await expect(editor).toBeVisible();
+  // The editor focuses itself on mount and may start away from column 0.
+  // A click would move that cursor, so only take focus when it was lost.
+  if (!(await editor.evaluate((node) => node.classList.contains('cm-focused')))) {
+    await page.getByTestId('editor').locator('.cm-content').focus();
+  }
+  await expect(editor).toHaveClass(/cm-focused/);
 }
 
 async function play(page: Page, keys: string[]) {
@@ -163,8 +169,9 @@ test.describe('solved state', () => {
     await expect(page.getByTestId('hud-keys')).toHaveText('0');
     expect(await page.evaluate(() => localStorage.getItem('vimtutor-appendix:records:v1'))).toBeNull();
 
-    // The same cursor position reached with a real key does count.
-    await focusEditor(page);
+    // The same cursor position reached with a real key does count. The click
+    // above moved the cursor, so put it back at the start of the line first.
+    await page.getByTestId('editor').locator('.cm-line').first().click({ position: { x: 2, y: 8 } });
     await play(page, ['f', '-', ';', ';']);
     await expect(page.getByTestId('solved')).toBeVisible();
   });

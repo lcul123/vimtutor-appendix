@@ -1,4 +1,7 @@
 import { expect, test } from '@playwright/test';
+import { placedLessons } from '../../src/content/curriculum';
+
+const totalDrills = placedLessons().reduce((sum, lesson) => sum + lesson.drills.length, 0);
 
 test.describe('overview and records', () => {
   test.beforeEach(async ({ page }) => {
@@ -15,6 +18,7 @@ test.describe('overview and records', () => {
       );
     });
     await page.goto('/');
+    await page.getByRole('button', { name: /Hit a character on the line/ }).click();
     const row = page.locator('.drill-row').filter({ hasText: 'Replace the operator' });
     await expect(row).toContainText('1.50s');
     await expect(row).toContainText('4 keys');
@@ -32,11 +36,11 @@ test.describe('overview and records', () => {
       );
     });
     await page.goto('/');
-    await expect(page.locator('.hero__panel')).toContainText('1 / 37');
+    await expect(page.locator('.hero__panel')).toContainText(`1 / ${totalDrills}`);
 
     page.once('dialog', (dialog) => dialog.accept());
     await page.getByRole('button', { name: 'Clear bests' }).click();
-    await expect(page.locator('.hero__panel')).toContainText('0 / 37');
+    await expect(page.locator('.hero__panel')).toContainText(`0 / ${totalDrills}`);
     await expect(page.locator('.hero__panel')).toContainText('Total runs0');
   });
 
@@ -45,13 +49,13 @@ test.describe('overview and records', () => {
       window.localStorage.setItem(
         'vimtutor-appendix:records:v1',
         JSON.stringify({
-          'inline-1': { bestTimeMs: 1500, bestKeys: 4, runs: 1, updatedAt: 1 },
+          'hjkl-right': { bestTimeMs: 1500, bestKeys: 4, runs: 1, updatedAt: 1 },
         }),
       );
     });
     await page.goto('/');
     await page.getByRole('button', { name: 'Continue' }).click();
-    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Commas into semicolons');
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Move down');
   });
 
   test('next drill walks through a lesson and into the next one', async ({ page }) => {
